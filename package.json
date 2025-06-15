@@ -1,0 +1,22 @@
+{
+  "name": "eth-tx",
+  "version": "1.0.0",
+  "description": "A minimal Ethereum transaction sending library using only Ethereum client API.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "ethereum",
+    "transaction",
+    "raw",
+    "client",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ethereumjs-util": "^7.1.5"
+  }
+}

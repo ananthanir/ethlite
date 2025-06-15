@@ -1,0 +1,124 @@
+// abi/encode.js
+// Minimal ABI encoder for Ethereum contract calls
+import { keccak256 } from 'ethereumjs-util';
+
+// Pad a hex string to 32 bytes (64 hex chars)
+function padTo32Bytes(hex) {
+  return hex.padStart(64, '0');
+}
+
+// Encode uint256 as 32-byte hex
+function encodeUint256(value) {
+  let hex = BigInt(value).toString(16);
+  return padTo32Bytes(hex);
+}
+
+// Encode address as 32-byte hex
+function encodeAddress(value) {
+  let hex = value.toLowerCase().replace(/^0x/, '');
+  return padTo32Bytes(hex);
+}
+
+// Encode boolean as 32-byte hex (0 or 1)
+function encodeBool(value) {
+  return padTo32Bytes(value ? '1' : '0');
+}
+
+// Encode fixed-size bytes (bytesN)
+function encodeBytes(value, size) {
+  let hex = value.toLowerCase().replace(/^0x/, '');
+  if (size) {
+    if (hex.length !== size * 2) throw new Error('Invalid bytesN length');
+    return padTo32Bytes(hex);
+  } else {
+    // Dynamic bytes not supported in this minimal version
+    throw new Error('Dynamic bytes not supported');
+  }
+}
+
+// Convert value to hex string for dynamic types
+function toHex(value) {
+  if (Buffer.isBuffer(value)) return value.toString('hex');
+  if (typeof value === 'string') {
+    if (value.startsWith('0x')) return value.slice(2);
+    // If plain string, treat as utf8 for dynamic bytes
+    return Buffer.from(value, 'utf8').toString('hex');
+  }
+  if (typeof value === 'bigint' || typeof value === 'number') {
+    if (value < 0) throw new Error('Negative numbers not supported');
+    let hex = BigInt(value).toString(16);
+    if (hex.length % 2 !== 0) hex = '0' + hex;
+    return hex;
+  }
+  throw new Error('Cannot convert value to hex');
+}
+
+// Encode dynamic bytes (bytes, string)
+function encodeDynamicBytes(value) {
+  let hex = toHex(value);
+  if (hex.length % 2 !== 0) hex = '0' + hex;
+  const length = padTo32Bytes((hex.length / 2).toString(16));
+  const data = hex.padEnd(Math.ceil(hex.length / 64) * 64, '0');
+  return length + data;
+}
+
+// Encode string as dynamic bytes
+function encodeString(value) {
+  const hex = Buffer.from(value, 'utf8').toString('hex');
+  return encodeDynamicBytes(hex);
+}
+
+/**
+ * ABI-encode function arguments for contract call
+ * @param {Array} types - Solidity types (e.g. ['address','uint256'])
+ * @param {Array} values - Argument values
+ * @returns {string} ABI-encoded hex string (no 0x)
+ */
+export function encodeArguments(types, values) {
+  if (types.length !== values.length) throw new Error('Types/values length mismatch');
+  const heads = [];
+  const tails = [];
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i];
+    const value = values[i];
+    if (type === 'uint256' || type === 'uint') heads.push(encodeUint256(value));
+    else if (type === 'address') heads.push(encodeAddress(value));
+    else if (type === 'bool') heads.push(encodeBool(value));
+    else if (type.startsWith('bytes') && type !== 'bytes') {
+      const size = parseInt(type.slice(5), 10);
+      heads.push(encodeBytes(value, size));
+    } else if (type === 'bytes') {
+      // dynamic bytes
+      heads.push('');
+      tails.push(encodeDynamicBytes(value));
+    } else if (type === 'string') {
+      heads.push('');
+      tails.push(encodeString(value));
+    } else {
+      throw new Error('Type not supported: ' + type);
+    }
+  }
+  // Fill in dynamic heads with offsets
+  let headLen = types.length * 32;
+  let tailOffset = 0;
+  let tailData = '';
+  let dynamicIndex = 0;
+  for (let i = 0; i < types.length; i++) {
+    if (heads[i] === '') {
+      // dynamic type
+      heads[i] = padTo32Bytes((headLen + tailOffset).toString(16));
+      tailData += tails[dynamicIndex++];
+      tailOffset = tailData.length / 2;
+    }
+  }
+  return heads.join('') + tailData;
+}
+
+/**
+ * Get 4-byte function selector from signature
+ * @param {string} signature - e.g. 'transfer(address,uint256)'
+ * @returns {string} 4-byte selector as hex (no 0x)
+ */
+export function getSelector(signature) {
+  return keccak256(Buffer.from(signature)).slice(0, 4).toString('hex');
+}
