@@ -1,4 +1,7 @@
 // Example test script: store and retrieve a value from a contract
+// For contract deployment, set `to` to `undefined` and `data` to contract bytecode.
+// For function call, set `to` to contract address and `data` to encoded function call.
+// This library is for educational/demo purposes and does not include transaction signing.
 import { buildTx, encodeFunctionCall } from './index.js';
 import { signTx } from './lib/txTypes.js';
 import { sendRawTransactionHttp, ethCall } from './lib/sendTx.js';
@@ -16,7 +19,7 @@ async function main() {
   const nonce = 6; // update as needed
   // Build and sign transaction
   const tx = buildTx({
-    to: contractAddress,
+    to: contractAddress, // for deployment: to: undefined, data: <bytecode>
     value: 0,
     data: storeData,
     gas: 100000,
